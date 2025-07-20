@@ -1,94 +1,57 @@
 package auth
 
 import (
-	"awesomeProject2/internal/pkg/utils"
-	"bytes"
-	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"net/http/httptest"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	"testing"
 )
 
-const hashedPassword = "$2a$14$zF66Lgn6lBIDRZxCrFhhwe3fYGoAK0DFeXNdvTqMoU2ykTSttP08i"
-
-func setupTestRouter() *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	r := gin.Default()
-
-	hashed, err := utils.HashPassword("123456")
+func setupTestAuthService() *AuthService {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
-		panic("şifre hashlenemedi: " + err.Error())
+		panic("in-memory DB başlatılamadı: " + err.Error())
 	}
-
-	fakeUserStore["test@example.com"] = User{
-		ID:       99,
-		Email:    "test@example.com",
-		Password: hashed,
-	}
-
-	RegisterRoutes(r)
-	return r
+	_ = db.AutoMigrate(&User{})
+	repo := &PgUserRepo{DB: db}
+	return NewAuthService(repo)
 }
 
-func TestLogin_Success(t *testing.T) {
-	router := setupTestRouter()
+func TestRegisterAndLogin_Success(t *testing.T) {
+	service := setupTestAuthService()
 
-	body := map[string]string{
-		"email":    "test@example.com",
-		"password": "123456",
-	}
-	jsonBody, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	// Register
+	err := service.Register("test@example.com", "123456")
 	assert.NoError(t, err)
 
-	assert.Contains(t, response, "token")
-	assert.Contains(t, response, "user")
+	// Login
+	user, err := service.Login("test@example.com", "123456")
+	assert.NoError(t, err)
+	assert.Equal(t, "test@example.com", user.Email)
+}
+
+func TestRegister_ExistingUser(t *testing.T) {
+	service := setupTestAuthService()
+
+	_ = service.Register("test@example.com", "123456")
+
+	// Try again
+	err := service.Register("test@example.com", "123456")
+	assert.ErrorIs(t, err, ErrUserExists)
 }
 
 func TestLogin_InvalidPassword(t *testing.T) {
-	router := setupTestRouter()
+	service := setupTestAuthService()
 
-	body := map[string]string{
-		"email":    "test@example.com",
-		"password": "wrongpassword",
-	}
-	jsonBody, _ := json.Marshal(body)
+	_ = service.Register("test@example.com", "123456")
 
-	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	_, err := service.Login("test@example.com", "wrongpass")
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
 }
 
 func TestLogin_UserNotFound(t *testing.T) {
-	router := setupTestRouter()
+	service := setupTestAuthService()
 
-	body := map[string]string{
-		"email":    "notfound@example.com",
-		"password": "123456",
-	}
-	jsonBody, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	_, err := service.Login("notfound@example.com", "123456")
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
 }

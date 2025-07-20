@@ -13,9 +13,9 @@ Content-Type: application/json
 
 {
   "email": "user@example.com",
-  "password": "123456"
+  "password": "12345"
 }
 
 ### Me
 GET http://localhost:8080/me
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTI5NzQ1MDQsInVzZXJfaWQiOjF9.cTFdWXDYbMPl6xOdiZ9TfjR18Ppmsuim3tocTHY12Rs
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTI5ODI3ODcsInVzZXJfaWQiOjF9.ygPlIOY4d7nYYM17Hm4-gyzVpFqgZSUkpmyckCQ2gGo
